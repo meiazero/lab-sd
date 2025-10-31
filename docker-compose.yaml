@@ -1,0 +1,9 @@
+services:
+  build-jar:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Copia o artefato do container para o host via volume
+    command: ["/bin/sh", "-c", "cp /artifact/lab1.jar /out/lab1.jar"]
+    volumes:
+      - ./dist:/out

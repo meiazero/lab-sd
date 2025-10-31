@@ -9,29 +9,21 @@ import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.mapred.TextOutputFormat;
 
 /**
- * Entry point do job Hadoop (API mapred). Esta classe configura e executa
- * o Map e o Reduce definidos em Map.java e Reduce.java.
+ * Driver do job Hadoop (API mapred) para calcular o tempo médio por dia
+ * (300 dias) e filtrar máquinas com média >= 1h/dia.
  *
  * Uso:
- *   hadoop jar lab1.jar Main <input> <output> [numReducers]
- *
- * Notas:
- * - Configurado para rodar em modo local (sem HDFS/YARN).
- * - O arquivo de entrada pode ser um caminho local (ex.: event-trace.txt).
+ *   hadoop jar lab1.jar TempoPorMaquina <input> <output> [numReducers]
  */
-public class Main {
+public class TempoPorMaquina {
   public static void main(String[] args) throws Exception {
     if (args.length < 2) {
-      System.err.println("Uso: hadoop jar lab1.jar Main <input> <output> [numReducers]");
+      System.err.println("Uso: hadoop jar lab1.jar TempoPorMaquina <input> <output> [numReducers]");
       System.exit(1);
     }
 
-    JobConf conf = new JobConf(Main.class);
+    JobConf conf = new JobConf(TempoPorMaquina.class);
     conf.setJobName("tempo_maquina_filtrada");
-
-    // Força execução local (sem HDFS/YARN)
-    conf.set("mapred.job.tracker", "local");
-    conf.set("fs.defaultFS", "file:///");
 
     conf.setOutputKeyClass(LongWritable.class);
     conf.setOutputValueClass(Text.class);
