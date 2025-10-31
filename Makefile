@@ -24,6 +24,14 @@ run: jar
 	$(HADOOP) jar $(JAR_FILE) Main event-trace.txt out 1
 	$(HADOOP) fs -cat out/part-*
 
+# Execução em cluster (requer HDFS/YARN). Forneça HDFS_IN e HDFS_OUT.
+run-hdfs: jar
+	@test -n "$(HDFS_IN)" || (echo "Defina HDFS_IN (entrada no HDFS)" && exit 1)
+	@test -n "$(HDFS_OUT)" || (echo "Defina HDFS_OUT (saída no HDFS)" && exit 1)
+	-$(HADOOP) fs -rm -r -f $(HDFS_OUT) >/dev/null 2>&1 || true
+	$(HADOOP) jar $(JAR_FILE) Main $(HDFS_IN) $(HDFS_OUT) $(or $(REDUCERS),1)
+	$(HADOOP) fs -cat $(HDFS_OUT)/part-*
+
 clean:
 	rm -f *.class $(JAR_FILE)
 

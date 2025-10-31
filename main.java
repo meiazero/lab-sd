@@ -8,17 +8,7 @@ import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.mapred.TextOutputFormat;
 
-/**
- * Entry point do job Hadoop (API mapred). Esta classe configura e executa
- * o Map e o Reduce definidos em Map.java e Reduce.java.
- *
- * Uso:
- *   hadoop jar lab1.jar Main <input> <output> [numReducers]
- *
- * Notas:
- * - Configurado para rodar em modo local (sem HDFS/YARN).
- * - O arquivo de entrada pode ser um caminho local (ex.: event-trace.txt).
- */
+
 public class Main {
   public static void main(String[] args) throws Exception {
     if (args.length < 2) {
@@ -29,9 +19,7 @@ public class Main {
     JobConf conf = new JobConf(Main.class);
     conf.setJobName("tempo_maquina_filtrada");
 
-    // Força execução local (sem HDFS/YARN)
-    conf.set("mapred.job.tracker", "local");
-    conf.set("fs.defaultFS", "file:///");
+  // Não força modo local; deixa o cluster fornecer as configs (YARN/HDFS)
 
     conf.setOutputKeyClass(LongWritable.class);
     conf.setOutputValueClass(Text.class);
