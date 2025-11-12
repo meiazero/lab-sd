@@ -1,4 +1,5 @@
-#	component_id	node_name	event_type	event_start_time
+
+component_id	node_name	event_type	event_start_time	event_end_time
 0	100416828	1	1211524407.906	1211524417.922
 1	100416828	0	1211524417.922	1211524440.312
 2	100416828	1	1211524440.312	1211615915.156
