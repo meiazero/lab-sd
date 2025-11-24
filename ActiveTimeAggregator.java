@@ -56,8 +56,8 @@ public class ActiveTimeAggregator {
 
             // sanity parse
             try {
-                long s = Long.parseLong(startS);
-                long e = Long.parseLong(endS);
+                long s = (long) (Double.parseDouble(startS) * 1000);
+                long e = (long) (Double.parseDouble(endS) * 1000);
                 if (e <= s) return;
                 outKey.set(node);
                 outVal.set(s + "," + e);
@@ -106,8 +106,7 @@ public class ActiveTimeAggregator {
             }
             merged.add(new long[]{curS, curE});
 
-            // compute per-day accumulation by splitting merged intervals across UTC day boundaries
-            // and track global start/end
+            // Calculate global start, end, and total active time
             long globalStart = Long.MAX_VALUE;
             long globalEnd = Long.MIN_VALUE;
             long totalActiveMs = 0L;
@@ -117,28 +116,23 @@ public class ActiveTimeAggregator {
                 long e = in[1];
                 if (s < globalStart) globalStart = s;
                 if (e > globalEnd) globalEnd = e;
-
-                long cur = s;
-                while (cur < e) {
-                    long dayStart = (cur / MS_PER_DAY) * MS_PER_DAY; // UTC midnight for that day
-                    long nextDayStart = dayStart + MS_PER_DAY;
-                    long takeUntil = Math.min(e, nextDayStart);
-                    long delta = takeUntil - cur;
-                    if (delta > 0) totalActiveMs += delta;
-                    cur = takeUntil;
-                }
+                totalActiveMs += (e - s);
             }
 
-            // Check 300-day accumulated threshold
-            if (totalActiveMs < THRESHOLD_MS) return;
+            // Check 300-day lifespan threshold
+            long lifespan = globalEnd - globalStart;
+            if (lifespan < THRESHOLD_MS) return;
 
-            // average per day across fixed 300 days
-            long avgPerDayMs = totalActiveMs / THRESHOLD_DAYS;
+            // Calculate average active time per day based on lifespan
+            double days = (double) lifespan / MS_PER_DAY;
+            if (days < 1.0) days = 1.0; // Safety check
+            
+            double avgPerDayMs = totalActiveMs / days;
 
-            if (avgPerDayMs < ONE_HOUR_MS) return; // average < 1 hour/day -> ignore
+            if (avgPerDayMs < ONE_HOUR_MS) return; 
 
             // format avgPerDayMs to HH:MM:SS
-            String avgHms = msToHMS(avgPerDayMs);
+            String avgHms = msToHMS((long) avgPerDayMs);
 
             // output CSV: node_name,avg_HH:MM:SS,global_start_epoch_ms,global_end_epoch_ms
             StringBuilder sb = new StringBuilder();

@@ -5,8 +5,7 @@
 # ============================================
 
 # Nome do arquivo fonte (código único)
-SRC         = HadoopJob.java
-# SRC         = ActiveTimeAggregator.java
+SRC         = AnaliseDeTempo.java
 
 # Nome do JAR de saída
 JAR_FILE    = hadoop-log-analysis.jar
@@ -45,7 +44,7 @@ run: jar
 	@echo "Reducers: $(REDUCERS)"
 	@echo "========================================"
 	-$(HADOOP) fs -rm -r -f /output >/dev/null 2>&1
-	$(HADOOP) jar $(JAR_FILE) HadoopJob -D mapreduce.job.reduces=$(REDUCERS) /input /output
+	$(HADOOP) jar $(JAR_FILE) ActiveTimeAggregator -D mapreduce.job.reduces=$(REDUCERS) /input /output
 	@echo "Job concluído! Salvando resultados..."
 	$(HADOOP) fs -cat /output/part-r-00000 > resultados.csv
 	@echo "Resultados salvos em: resultados.csv"
@@ -56,7 +55,7 @@ run: jar
 run-local: jar
 	@echo "Executando teste local com amostra..."
 	-$(HADOOP) fs -rm -r -f /output >/dev/null 2>&1
-	$(HADOOP) jar $(JAR_FILE) HadoopJob -D mapreduce.job.reduces=2 /input/sample.csv /output
+	$(HADOOP) jar $(JAR_FILE) ActiveTimeAggregator -D mapreduce.job.reduces=2 /input/sample.csv /output
 	@echo "Resultado do teste:"
 	$(HADOOP) fs -cat /output/part-r-00000
 
