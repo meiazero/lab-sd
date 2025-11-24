@@ -89,8 +89,13 @@ public class AnaliseDeTempo {
 
                 if (averageSecondsPerDay >= MIN_AVG_SECONDS_PER_DAY) {
                     
-                    String resultString = String.format("%.2f s/dia\tInicio:%d\tFim:%d", 
-                                                        averageSecondsPerDay, traceStart, traceEnd);
+                    // Normalização para horas (mais legível para humanos)
+                    double averageHoursPerDay = averageSecondsPerDay / 3600.0;
+
+                    // Formato CSV: avg_hours_day, span_days, start_epoch, end_epoch
+                    // Exemplo: 1.50, 305.20, 1211524407, 1212269739
+                    String resultString = String.format("%.4f,%.2f,%d,%d", 
+                                                        averageHoursPerDay, daysActive, traceStart, traceEnd);
                     
                     resultValue.set(resultString);
                     output.collect(key, resultValue);
@@ -107,6 +112,9 @@ public class AnaliseDeTempo {
 
         JobConf conf = new JobConf(AnaliseDeTempo.class);
         conf.setJobName("analisetempo_tarefa2");
+        
+        // Define o separador do arquivo de saída como vírgula para formato CSV
+        conf.set("mapred.textoutputformat.separator", ",");
 
         conf.setOutputKeyClass(LongWritable.class);
         conf.setOutputValueClass(Text.class);

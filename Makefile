@@ -46,10 +46,11 @@ run: jar
 	-$(HADOOP) fs -rm -r -f /output >/dev/null 2>&1
 	$(HADOOP) jar $(JAR_FILE) AnaliseDeTempo -D mapreduce.job.reduces=$(REDUCERS) /input /output
 	@echo "Job concluído! Salvando resultados..."
-	$(HADOOP) fs -cat /output/part-00000 > resultados.csv
+	@echo "node_id,avg_hours_per_day,active_span_days,start_epoch,end_epoch" > resultados.csv
+	$(HADOOP) fs -cat /output/part-00000 >> resultados.csv
 	@echo "Resultados salvos em: resultados.csv"
 	@echo "Top 5 máquinas (tempo médio):"
-	@head -5 resultados.csv
+	@head -6 resultados.csv
 
 # Executa teste rápido com amostra (se existir sample.csv no HDFS)
 run-local: jar
