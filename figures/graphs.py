@@ -7,15 +7,16 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Configuração de estilo para gráficos bonitos
-sns.set_theme(style="whitegrid")
+# Configuração de estilo para gráficos bonitos e profissionais
+sns.set_theme(
+    style="whitegrid", context="talk"
+)  # Contexto 'talk' aumenta fontes para apresentações
 plt.rcParams["figure.figsize"] = (12, 8)
-plt.rcParams["font.size"] = 12
 
 
-def load_data(filepath):
+def load_and_process_data(filepath):
     """
-    Carrega os dados do arquivo CSV.
+    Carrega os dados e adiciona métricas derivadas para análise estatística.
     """
     if not os.path.exists(filepath):
         print(f"Erro: Arquivo '{filepath}' não encontrado.")
@@ -26,143 +27,116 @@ def load_data(filepath):
 
     try:
         df = pd.read_csv(filepath)
+
+        # 1. Normalização: Taxa de Utilização (0-100%)
+        # Transforma horas/dia em uma porcentagem de uso da capacidade total (24h)
+        df["utilization_pct"] = (df["avg_hours_per_day"] / 24.0) * 100
+
+        # 2. Categorização: Quartis de Tempo de Vida
+        # Agrupa as máquinas em 4 categorias baseadas no tempo de vida (quartis)
+        # Isso permite comparar o comportamento de máquinas "jovens" vs "velhas"
+        if len(df) >= 4:
+            df["lifespan_quartile"] = pd.qcut(
+                df["active_span_days"],
+                q=4,
+                labels=["Q1 (Curto)", "Q2 (Médio)", "Q3 (Longo)", "Q4 (Muito Longo)"],
+                retbins=False,
+            )
+        else:
+            df["lifespan_quartile"] = "Geral"
+
         return df
     except Exception as e:
-        print(f"Erro ao ler o arquivo CSV: {e}")
+        print(f"Erro ao processar dados: {e}")
         sys.exit(1)
 
 
-def plot_activity_distribution(df, output_dir):
+def plot_utilization_distribution(df, output_dir):
     """
-    Plota a distribuição do tempo médio de atividade diária.
-    Isso ajuda a entender o perfil das máquinas (ex: servidores 24/7 vs estações de trabalho).
+    Plota a distribuição da Taxa de Utilização (%) com KDE e ECDF.
+    A ECDF (Função de Distribuição Acumulada Empírica) é excelente para responder:
+    "Qual porcentagem das máquinas tem utilização abaixo de X%?"
     """
-    plt.figure(figsize=(10, 6))
+    fig, ax = plt.subplots(1, 2, figsize=(16, 6))
+
+    # Histograma + KDE
     sns.histplot(
-        data=df,
-        x="avg_hours_per_day",
-        bins=30,
-        kde=True,
-        color="#3498db",
-        edgecolor="white",
+        data=df, x="utilization_pct", bins=30, kde=True, color="#3498db", ax=ax[0]
     )
-    plt.title(
-        "Distribuição do Tempo Médio de Atividade Diária",
-        fontsize=16,
-        fontweight="bold",
-    )
-    plt.xlabel("Média de Horas Ativas por Dia", fontsize=12)
-    plt.ylabel("Contagem de Máquinas", fontsize=12)
+    ax[0].set_title("Distribuição da Taxa de Utilização")
+    ax[0].set_xlabel("Utilização (%)")
+    ax[0].set_ylabel("Frequência")
 
-    mean_val = df["avg_hours_per_day"].mean()
-    plt.axvline(
-        mean_val,
-        color="red",
-        linestyle="--",
-        label=f"Média: {mean_val:.2f}h",
+    # ECDF
+    sns.ecdfplot(data=df, x="utilization_pct", color="#e74c3c", linewidth=3, ax=ax[1])
+    ax[1].set_title("Probabilidade Acumulada (ECDF)")
+    ax[1].set_xlabel("Utilização (%)")
+    ax[1].set_ylabel("Proporção de Máquinas")
+    ax[1].grid(True, which="both", linestyle="--", alpha=0.5)
+
+    # Linhas de referência (ex: mediana)
+    median_util = df["utilization_pct"].median()
+    ax[1].axvline(
+        median_util, color="black", linestyle=":", label=f"Mediana: {median_util:.1f}%"
     )
-    plt.legend()
+    ax[1].legend()
+
     plt.tight_layout()
-
-    output_path = os.path.join(output_dir, "distribuicao_atividade.png")
-    plt.savefig(output_path, dpi=300)
-    plt.close()
+    save_plot(output_dir, "distribuicao_utilizacao_ecdf.png")
 
 
-def plot_lifespan_vs_activity(df, output_dir):
+def plot_utilization_by_lifespan_boxplot(df, output_dir):
     """
-    Plota a relação entre o tempo de vida da máquina no sistema e sua atividade média.
-    Ajuda a identificar se máquinas mais antigas tendem a ser mais ou menos ativas.
+    Boxplot comparando a utilização entre diferentes grupos de tempo de vida.
+    Isso agrega valor estatístico ao mostrar a variância e outliers dentro de cada grupo.
     """
-    plt.figure(figsize=(10, 6))
-    sns.scatterplot(
-        data=df,
-        x="active_span_days",
-        y="avg_hours_per_day",
-        alpha=0.6,
-        color="#2ecc71",
-        s=80,
-    )
-
-    # Adiciona uma linha de tendência se houver dados suficientes
-    if len(df) > 1:
-        sns.regplot(
-            data=df,
-            x="active_span_days",
-            y="avg_hours_per_day",
-            scatter=False,
-            color="#27ae60",
-            line_kws={"linestyle": "--"},
-        )
-
-    plt.title(
-        "Relação: Tempo de Vida vs. Atividade Média", fontsize=16, fontweight="bold"
-    )
-    plt.xlabel("Tempo de Vida no Sistema (Dias)", fontsize=12)
-    plt.ylabel("Média de Horas Ativas por Dia", fontsize=12)
-    plt.tight_layout()
-
-    output_path = os.path.join(output_dir, "vida_vs_atividade.png")
-    plt.savefig(output_path, dpi=300)
-    plt.close()
-
-
-def plot_timeline(df, output_dir):
-    """
-    Plota uma linha do tempo para uma amostra das máquinas, mostrando quando começaram e terminaram.
-    Útil para visualizar a entrada e saída de nós no cluster.
-    """
-    # Ordena por data de início
-    df_sorted = df.sort_values("start_epoch")
-
-    # Limita a 50 máquinas para o gráfico não ficar ilegível
-    if len(df_sorted) > 50:
-        sample = df_sorted.sample(50, random_state=42).sort_values("start_epoch")
-        subtitle = "(Amostra aleatória de 50 máquinas)"
-    else:
-        sample = df_sorted
-        subtitle = ""
-
     plt.figure(figsize=(12, 8))
 
-    # Converte epoch para datetime para o eixo X
-    dates_start = pd.to_datetime(sample["start_epoch"], unit="s")
-    dates_end = pd.to_datetime(sample["end_epoch"], unit="s")
-
-    # Plota linhas horizontais
-    plt.hlines(
-        y=range(len(sample)),
-        xmin=dates_start,
-        xmax=dates_end,
-        color="#9b59b6",
-        alpha=0.8,
-        linewidth=3,
-    )
-    plt.scatter(
-        dates_start,
-        range(len(sample)),
-        color="#8e44ad",
-        s=30,
-        marker="|",
-        label="Início",
-    )
-    plt.scatter(
-        dates_end, range(len(sample)), color="#e74c3c", s=30, marker="|", label="Fim"
+    sns.boxplot(data=df, x="lifespan_quartile", y="utilization_pct", palette="viridis")
+    sns.stripplot(
+        data=df,
+        x="lifespan_quartile",
+        y="utilization_pct",
+        color=".3",
+        alpha=0.4,
+        size=3,
     )
 
-    plt.title(
-        f"Linha do Tempo de Vida das Máquinas {subtitle}",
-        fontsize=16,
-        fontweight="bold",
-    )
-    plt.xlabel("Data", fontsize=12)
-    plt.ylabel("Máquinas (Ordenadas por Início)", fontsize=12)
-    plt.yticks([])  # Remove labels do eixo Y pois são apenas índices
-    plt.grid(axis="x", linestyle="--", alpha=0.7)
-    plt.tight_layout()
+    plt.title("Utilização da Máquina por Categoria de Tempo de Vida", fontweight="bold")
+    plt.xlabel("Quartil de Tempo de Vida (Dias)")
+    plt.ylabel("Taxa de Utilização (%)")
 
-    output_path = os.path.join(output_dir, "timeline_maquinas.png")
-    plt.savefig(output_path, dpi=300)
+    save_plot(output_dir, "boxplot_utilizacao_por_vida.png")
+
+
+def plot_joint_analysis(df, output_dir):
+    """
+    Joint Plot (Scatter + Histogramas Marginais) para correlacionar Vida vs Utilização.
+    Usa hexbin ou kde para lidar melhor com sobreposição de pontos se houver muitos dados.
+    """
+    # Usando 'reg' para adicionar uma linha de regressão linear e ver a tendência
+    g = sns.jointplot(
+        data=df,
+        x="active_span_days",
+        y="utilization_pct",
+        kind="reg",
+        truncate=False,
+        color="#2ecc71",
+        height=10,
+        scatter_kws={"alpha": 0.5, "s": 30},
+    )
+
+    g.fig.suptitle(
+        "Correlação: Tempo de Vida vs. Taxa de Utilização", y=1.02, fontweight="bold"
+    )
+    g.set_axis_labels("Tempo de Vida (Dias)", "Taxa de Utilização (%)")
+
+    save_plot(output_dir, "jointplot_correlacao.png")
+
+
+def save_plot(output_dir, filename):
+    path = os.path.join(output_dir, filename)
+    plt.savefig(path, dpi=300, bbox_inches="tight")
     plt.close()
 
 
@@ -185,7 +159,7 @@ def main():
         csv_path = os.path.join("..", "resultados.csv")
 
     print(f"Lendo dados de: {csv_path}")
-    df = load_data(csv_path)
+    df = load_and_process_data(csv_path)
 
     if df.empty:
         print("O arquivo CSV está vazio.")
@@ -194,10 +168,10 @@ def main():
     print(f"Dados carregados: {len(df)} registros.")
 
     # Exibe uma prévia dos dados mais ativos
-    print("\nTop 5 máquinas com maior tempo médio de atividade:")
+    print("\nTop 5 máquinas com maior taxa de utilização:")
     print(
-        df.sort_values(by="avg_hours_per_day", ascending=False).head()[
-            ["node_id", "avg_hours_per_day", "active_span_days"]
+        df.sort_values(by="utilization_pct", ascending=False).head()[
+            ["node_id", "utilization_pct", "active_span_days"]
         ]
     )
     print("-" * 30)
@@ -206,9 +180,9 @@ def main():
     output_dir = os.path.dirname(os.path.abspath(__file__))
 
     # Gera os gráficos
-    plot_activity_distribution(df, output_dir)
-    plot_lifespan_vs_activity(df, output_dir)
-    plot_timeline(df, output_dir)
+    plot_utilization_distribution(df, output_dir)
+    plot_utilization_by_lifespan_boxplot(df, output_dir)
+    plot_joint_analysis(df, output_dir)
 
 
 if __name__ == "__main__":
