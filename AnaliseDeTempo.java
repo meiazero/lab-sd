@@ -7,77 +7,93 @@ import org.apache.hadoop.mapred.*;
 
 public class AnaliseDeTempo {
 
-    // O Mapper permanece idêntico ao do Exercício 1
+    private static final long SECONDS_PER_DAY = 86400L;
+    private static final double MIN_ACTIVE_DAYS = 300.0;
+    private static final double MIN_AVG_SECONDS_PER_DAY = 3600.0;
+
     public static class Map extends MapReduceBase implements Mapper<LongWritable, Text, LongWritable, Text> {
-        private LongWritable k = new LongWritable();
-        private Text v = new Text();
+        private LongWritable machineId = new LongWritable();
+        private Text timeRange = new Text();
 
         public void map(LongWritable key, Text value, OutputCollector<LongWritable, Text> output, Reporter reporter) throws IOException {
             String line = value.toString();
-            if (line.startsWith("#")) return;
+            if (line.startsWith("#") || line.trim().isEmpty()) return;
 
             String[] tokens = line.split("\\s+");
 
+            // Expected format: index, machineId, eventType, start, end
             if (tokens.length >= 5) {
-                // Filtra apenas eventos onde a máquina estava ligada (event_type == 1)
-                if (tokens[2].equals("1")) {
-                    long machineId = Long.parseLong(tokens[1]);
-                    k.set(machineId);
-                    v.set(tokens[3] + ":" + tokens[4]); 
-                    output.collect(k, v);
+                String eventType = tokens[2];
+                // Filter for active events (event_type == 1)
+                if ("1".equals(eventType)) {
+                    try {
+                        long id = Long.parseLong(tokens[1]);
+                        String start = tokens[3];
+                        String end = tokens[4];
+                        
+                        machineId.set(id);
+                        timeRange.set(start + ":" + end);
+                        output.collect(machineId, timeRange);
+                    } catch (NumberFormatException e) {
+                        // Ignore malformed lines
+                    }
                 }
             }
         }
     }
 
-    // Reducer modificado para a Tarefa 2
     public static class Reduce extends MapReduceBase implements Reducer<LongWritable, Text, LongWritable, Text> {
-        private Text val = new Text();
+        private Text resultValue = new Text();
 
         public void reduce(LongWritable key, Iterator<Text> values, OutputCollector<LongWritable, Text> output, Reporter reporter) throws IOException {
             long totalDurationSeconds = 0;
             long traceStart = Long.MAX_VALUE;
-            long traceEnd = 0;
+            long traceEnd = Long.MIN_VALUE;
+            boolean hasData = false;
 
-            // Itera sobre todos os eventos da máquina
             while (values.hasNext()) {
                 String line = values.next().toString();
                 String[] tokens = line.split(":");
                 
-                long start = (long) Double.parseDouble(tokens[0]);
-                long end = (long) Double.parseDouble(tokens[1]);
+                if (tokens.length < 2) continue;
 
-                // Encontra o primeiro start e o último end para saber o período de atividade
-                if (start < traceStart) traceStart = start;
-                if (end > traceEnd) traceEnd = end;
+                try {
+                    // Parse timestamps (seconds)
+                    long start = (long) Double.parseDouble(tokens[0]);
+                    long end = (long) Double.parseDouble(tokens[1]);
 
-                // Soma o tempo que ficou ligada
-                totalDurationSeconds += (end - start);
+                    if (start < traceStart) traceStart = start;
+                    if (end > traceEnd) traceEnd = end;
+
+                    if (end > start) {
+                        totalDurationSeconds += (end - start);
+                    }
+                    hasData = true;
+                } catch (NumberFormatException e) {
+                    continue;
+                }
             }
 
-            // Lógica da Tarefa 2
-            // 1. Calcular quantos dias a máquina esteve ativa no sistema (Intervalo total)
+            if (!hasData) return;
+
             long spanSeconds = traceEnd - traceStart;
-            // Evita divisão por zero
             if (spanSeconds <= 0) return;
 
-            double daysActive = spanSeconds / 86400.0; // 86400 segundos em um dia
+            double daysActive = spanSeconds / (double) SECONDS_PER_DAY;
 
-            // Requisito 1: Máquina ativa por 300 dias (considerando o span de tempo)
-            if (daysActive >= 300.0) {
+            // Requisito 1: Máquina ativa por pelo menos 300 dias
+            if (daysActive >= MIN_ACTIVE_DAYS) {
                 
-                // Requisito 2: Tempo médio maior ou igual a 1 hora por dia
+                // Requisito 2: Tempo médio >= 1 hora por dia
                 double averageSecondsPerDay = totalDurationSeconds / daysActive;
 
-                if (averageSecondsPerDay >= 3600.0) { // 3600 segundos = 1 hora
+                if (averageSecondsPerDay >= MIN_AVG_SECONDS_PER_DAY) {
                     
-                    // Formata a saída: "TempoMédio(s)  DataInicio  DataFim"
-                    // (Você pode formatar TempoMédio para horas se preferir, aqui está em segundos/dia)
                     String resultString = String.format("%.2f s/dia\tInicio:%d\tFim:%d", 
                                                         averageSecondsPerDay, traceStart, traceEnd);
                     
-                    val.set(resultString);
-                    output.collect(key, val);
+                    resultValue.set(resultString);
+                    output.collect(key, resultValue);
                 }
             }
         }

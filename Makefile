@@ -44,20 +44,20 @@ run: jar
 	@echo "Reducers: $(REDUCERS)"
 	@echo "========================================"
 	-$(HADOOP) fs -rm -r -f /output >/dev/null 2>&1
-	$(HADOOP) jar $(JAR_FILE) ActiveTimeAggregator -D mapreduce.job.reduces=$(REDUCERS) /input /output
+	$(HADOOP) jar $(JAR_FILE) AnaliseDeTempo -D mapreduce.job.reduces=$(REDUCERS) /input /output
 	@echo "Job concluído! Salvando resultados..."
-	$(HADOOP) fs -cat /output/part-r-00000 > resultados.csv
+	$(HADOOP) fs -cat /output/part-00000 > resultados.csv
 	@echo "Resultados salvos em: resultados.csv"
 	@echo "Top 5 máquinas (tempo médio):"
-	@head -5 resultados.csv | awk -F',' '{printf "  %s: %.2f horas/dia\n", $$1, $$2/60}'
+	@head -5 resultados.csv
 
 # Executa teste rápido com amostra (se existir sample.csv no HDFS)
 run-local: jar
 	@echo "Executando teste local com amostra..."
 	-$(HADOOP) fs -rm -r -f /output >/dev/null 2>&1
-	$(HADOOP) jar $(JAR_FILE) ActiveTimeAggregator -D mapreduce.job.reduces=2 /input/sample.csv /output
+	$(HADOOP) jar $(JAR_FILE) AnaliseDeTempo -D mapreduce.job.reduces=2 /input/amostra.txt /output
 	@echo "Resultado do teste:"
-	$(HADOOP) fs -cat /output/part-r-00000
+	$(HADOOP) fs -cat /output/part-00000
 
 # Verifica se os dados estão no HDFS
 check-data:
