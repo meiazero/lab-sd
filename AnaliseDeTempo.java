@@ -5,26 +5,45 @@ import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.*;
 
+/**
+ * Classe principal para análise de tempo de atividade de máquinas em um cluster Hadoop.
+ * Este job MapReduce filtra eventos ativos (event_type == 1) e calcula estatísticas
+ * para máquinas que foram ativas por pelo menos 300 dias com tempo médio >= 1 hora por dia.
+ * 
+ * Métricas calculadas:
+ * - Dias ativos: período total observado (span) em dias.
+ * - Tempo médio por dia: duração total ativa dividida pelos dias ativos.
+ * 
+ * Nota estatística: O tempo médio por dia é calculado sobre o span total, incluindo
+ * possíveis dias inativos. Isso representa a média diária ao longo do período observado,
+ * não necessariamente a média apenas nos dias com atividade.
+ */
 public class AnaliseDeTempo {
 
-    private static final long SECONDS_PER_DAY = 86400L;
-    private static final double MIN_ACTIVE_DAYS = 300.0;
-    private static final double MIN_AVG_SECONDS_PER_DAY = 3600.0;
+    // Constantes para cálculos de tempo
+    private static final long SECONDS_PER_DAY = 86400L; // Segundos em um dia
+    private static final double MIN_ACTIVE_DAYS = 300.0; // Mínimo de dias ativos
+    private static final double MIN_AVG_SECONDS_PER_DAY = 3600.0; // Mínimo 1 hora por dia em segundos
 
+    /**
+     * Classe Mapper: Processa cada linha do arquivo de entrada.
+     * Filtra eventos ativos (event_type == 1) e emite (machineId, start:end).
+     */
     public static class Map extends MapReduceBase implements Mapper<LongWritable, Text, LongWritable, Text> {
         private LongWritable machineId = new LongWritable();
         private Text timeRange = new Text();
 
         public void map(LongWritable key, Text value, OutputCollector<LongWritable, Text> output, Reporter reporter) throws IOException {
             String line = value.toString();
+            // Ignora comentários e linhas vazias
             if (line.startsWith("#") || line.trim().isEmpty()) return;
 
             String[] tokens = line.split("\\s+");
 
-            // Expected format: index, machineId, eventType, start, end
+            // Formato esperado: index, machineId, eventType, start, end
             if (tokens.length >= 5) {
                 String eventType = tokens[2];
-                // Filter for active events (event_type == 1)
+                // Filtra apenas eventos ativos (event_type == 1)
                 if ("1".equals(eventType)) {
                     try {
                         long id = Long.parseLong(tokens[1]);
@@ -35,22 +54,27 @@ public class AnaliseDeTempo {
                         timeRange.set(start + ":" + end);
                         output.collect(machineId, timeRange);
                     } catch (NumberFormatException e) {
-                        // Ignore malformed lines
+                        // Ignora linhas malformadas
                     }
                 }
             }
         }
     }
 
+    /**
+     * Classe Reducer: Agrega dados por machineId e calcula estatísticas.
+     * Verifica critérios de atividade e emite resultados em formato CSV.
+     */
     public static class Reduce extends MapReduceBase implements Reducer<LongWritable, Text, LongWritable, Text> {
         private Text resultValue = new Text();
 
         public void reduce(LongWritable key, Iterator<Text> values, OutputCollector<LongWritable, Text> output, Reporter reporter) throws IOException {
-            long totalDurationSeconds = 0;
-            long traceStart = Long.MAX_VALUE;
-            long traceEnd = Long.MIN_VALUE;
+            long totalDurationSeconds = 0; // Duração total ativa em segundos
+            long traceStart = Long.MAX_VALUE; // Timestamp inicial do período observado
+            long traceEnd = Long.MIN_VALUE;   // Timestamp final do período observado
             boolean hasData = false;
 
+            // Processa todos os intervalos de tempo para esta máquina
             while (values.hasNext()) {
                 String line = values.next().toString();
                 String[] tokens = line.split(":");
@@ -58,38 +82,42 @@ public class AnaliseDeTempo {
                 if (tokens.length < 2) continue;
 
                 try {
-                    // Parse timestamps (seconds)
+                    // Converte timestamps para long (segundos desde epoch)
                     long start = (long) Double.parseDouble(tokens[0]);
                     long end = (long) Double.parseDouble(tokens[1]);
 
+                    // Atualiza limites do período observado
                     if (start < traceStart) traceStart = start;
                     if (end > traceEnd) traceEnd = end;
 
+                    // Soma duração ativa (assume não há sobreposições nos dados)
                     if (end > start) {
                         totalDurationSeconds += (end - start);
                     }
                     hasData = true;
                 } catch (NumberFormatException e) {
-                    continue;
+                    continue; // Ignora erros de parsing
                 }
             }
 
             if (!hasData) return;
 
+            // Calcula span total em segundos
             long spanSeconds = traceEnd - traceStart;
             if (spanSeconds <= 0) return;
 
+            // Converte span para dias
             double daysActive = spanSeconds / (double) SECONDS_PER_DAY;
 
-            // Requisito 1: Máquina ativa por pelo menos 300 dias
+            // Critério 1: Máquina deve ter sido observada por pelo menos 300 dias
             if (daysActive >= MIN_ACTIVE_DAYS) {
                 
-                // Requisito 2: Tempo médio >= 1 hora por dia
+                // Critério 2: Tempo médio ativo >= 1 hora por dia
                 double averageSecondsPerDay = totalDurationSeconds / daysActive;
 
                 if (averageSecondsPerDay >= MIN_AVG_SECONDS_PER_DAY) {
                     
-                    // Normalização para horas (mais legível para humanos)
+                    // Converte para horas para legibilidade
                     double averageHoursPerDay = averageSecondsPerDay / 3600.0;
 
                     // Formato CSV: avg_hours_day, span_days, start_epoch, end_epoch
@@ -104,6 +132,9 @@ public class AnaliseDeTempo {
         }
     }
 
+    /**
+     * Método main: Configura e executa o job MapReduce.
+     */
     public static void main(String[] args) throws Exception {
         if (args.length < 2) {
             System.err.println("Uso: analisetempo <in> <out>");
@@ -113,7 +144,7 @@ public class AnaliseDeTempo {
         JobConf conf = new JobConf(AnaliseDeTempo.class);
         conf.setJobName("analisetempo_tarefa2");
         
-        // Define o separador do arquivo de saída como vírgula para formato CSV
+        // Define separador do arquivo de saída como vírgula para formato CSV
         conf.set("mapred.textoutputformat.separator", ",");
 
         conf.setOutputKeyClass(LongWritable.class);
