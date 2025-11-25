@@ -1,11 +1,13 @@
 import os
 import sys
-from pathlib import Path
-from datetime import datetime
 
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
 
 # Configuração de estilo para gráficos bonitos e profissionais
 sns.set_theme(
@@ -134,6 +136,106 @@ def plot_joint_analysis(df, output_dir):
     save_plot(output_dir, "jointplot_correlacao.png")
 
 
+def analyze_pca_and_clusters(df, output_dir):
+    """
+    Realiza análise multivariada avançada: PCA + K-Means + Autovalores/Autovetores.
+    """
+    print("\n--- Iniciando Análise Multivariada (PCA + Clustering) ---")
+
+    # 1. Preparação das Features
+    min_start = df["start_epoch"].min()
+    df["start_day_offset"] = (df["start_epoch"] - min_start) / 86400.0
+
+    features = ["active_span_days", "utilization_pct", "start_day_offset"]
+    feature_names = ["Tempo de Vida", "Utilização (%)", "Início (Dia)"]
+
+    X = df[features].dropna()
+
+    if len(X) < 5:
+        print("Dados insuficientes para PCA e Clustering.")
+        return
+
+    # 2. Padronização
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # 3. PCA
+    pca = PCA(n_components=2)
+    X_pca = pca.fit_transform(X_scaled)
+
+    explained_variance = pca.explained_variance_ratio_
+    eigenvalues = pca.explained_variance_
+    components = pca.components_
+
+    print(
+        f"Variância Explicada: PC1={explained_variance[0]*100:.1f}%, PC2={explained_variance[1]*100:.1f}%"
+    )
+    print(f"Autovalores: {eigenvalues}")
+
+    # 4. Clustering (K-Means)
+    kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
+    clusters = kmeans.fit_predict(X_scaled)
+
+    # 5. Plotagem do Biplot
+    plt.figure(figsize=(14, 10))
+
+    # Scatter plot
+    sns.scatterplot(
+        x=X_pca[:, 0],
+        y=X_pca[:, 1],
+        hue=clusters,
+        palette="viridis",
+        s=100,
+        alpha=0.7,
+        edgecolor="k",
+        legend="full",
+    )
+
+    # Vetores (Loadings)
+    scale_factor = np.max(np.abs(X_pca)) * 0.8
+    for i, (feat, x, y) in enumerate(zip(feature_names, components[0], components[1])):
+        plt.arrow(
+            0,
+            0,
+            x * scale_factor,
+            y * scale_factor,
+            color="red",
+            alpha=0.8,
+            head_width=0.05 * scale_factor,
+            linewidth=2,
+        )
+        plt.text(
+            x * scale_factor * 1.15,
+            y * scale_factor * 1.15,
+            feat,
+            color="darkred",
+            ha="center",
+            va="center",
+            fontweight="bold",
+            fontsize=12,
+        )
+
+    plt.title(
+        f"PCA Biplot + K-Means Clustering\n(Variância Total: {sum(explained_variance)*100:.1f}%)",
+        fontweight="bold",
+    )
+    plt.xlabel(f"PC1 ({explained_variance[0]*100:.1f}%)")
+    plt.ylabel(f"PC2 ({explained_variance[1]*100:.1f}%)")
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.legend(title="Cluster", loc="upper right")
+
+    save_plot(output_dir, "pca_clustering_analysis.png")
+
+    # Salva estatísticas
+    with open(os.path.join(output_dir, "pca_stats.txt"), "w") as f:
+        f.write("--- Estatísticas PCA ---\n")
+        f.write(f"Autovalores: {eigenvalues}\n")
+        f.write(f"Variância Explicada: {explained_variance}\n")
+        f.write("\nAutovetores (Cargas):\n")
+        for i, pc in enumerate(["PC1", "PC2"]):
+            f.write(f"{pc}: {dict(zip(feature_names, components[i]))}\n")
+
+
 def save_plot(output_dir, filename):
     path = os.path.join(output_dir, filename)
     plt.savefig(path, dpi=300, bbox_inches="tight")
@@ -143,9 +245,7 @@ def save_plot(output_dir, filename):
 def main():
     # Tenta localizar o arquivo CSV em locais prováveis
     possible_paths = [
-        os.path.join("..", "resultados.csv"),  # No diretório pai (padrão do Makefile)
-        "resultados.csv",  # No diretório atual
-        os.path.join("lab1", "resultados.csv"),  # Caso executado da raiz do projeto
+        "results-2.csv",  # No diretório atual
     ]
 
     csv_path = None
@@ -174,7 +274,6 @@ def main():
             ["node_id", "utilization_pct", "active_span_days"]
         ]
     )
-    print("-" * 30)
 
     # Define diretório de saída (diretório atual onde o script está)
     output_dir = os.path.dirname(os.path.abspath(__file__))
@@ -183,6 +282,7 @@ def main():
     plot_utilization_distribution(df, output_dir)
     plot_utilization_by_lifespan_boxplot(df, output_dir)
     plot_joint_analysis(df, output_dir)
+    analyze_pca_and_clusters(df, output_dir)
 
 
 if __name__ == "__main__":
