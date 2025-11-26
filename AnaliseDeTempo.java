@@ -109,26 +109,17 @@ public class AnaliseDeTempo {
             // Converte span para dias
             double daysActive = spanSeconds / (double) SECONDS_PER_DAY;
 
-            // Critério 1: Máquina deve ter sido observada por pelo menos 300 dias
-            if (daysActive >= MIN_ACTIVE_DAYS) {
-                
-                // Critério 2: Tempo médio ativo >= 1 hora por dia
-                double averageSecondsPerDay = totalDurationSeconds / daysActive;
+            // Calcula tempo médio ativo por dia
+            double averageSecondsPerDay = totalDurationSeconds / daysActive;
+            double averageHoursPerDay = averageSecondsPerDay / 3600.0;
 
-                if (averageSecondsPerDay >= MIN_AVG_SECONDS_PER_DAY) {
-                    
-                    // Converte para horas para legibilidade
-                    double averageHoursPerDay = averageSecondsPerDay / 3600.0;
-
-                    // Formato CSV: avg_hours_day, span_days, start_epoch, end_epoch
-                    // Exemplo: 1.50, 305.20, 1211524407, 1212269739
-                    String resultString = String.format("%.4f,%.2f,%d,%d", 
-                                                        averageHoursPerDay, daysActive, traceStart, traceEnd);
-                    
-                    resultValue.set(resultString);
-                    output.collect(key, resultValue);
-                }
-            }
+            // Formato CSV: avg_hours_day, span_days, start_epoch, end_epoch
+            // Exemplo: 1.50, 305.20, 1211524407, 1212269739
+            String resultString = String.format("%.4f,%.2f,%d,%d", 
+                                                averageHoursPerDay, daysActive, traceStart, traceEnd);
+            
+            resultValue.set(resultString);
+            output.collect(key, resultValue);
         }
     }
 
